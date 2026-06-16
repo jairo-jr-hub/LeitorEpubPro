@@ -1,3 +1,6 @@
+/* ==============================
+   RESET E CONFIGURAÇÕES GLOBAIS
+   ============================== */
 *,
 *::before,
 *::after {
@@ -7,14 +10,19 @@
 }
 
 :root {
+  /* Safe area do iPhone */
   --safe-inset-top: env(safe-area-inset-top);
   --safe-inset-bottom: env(safe-area-inset-bottom);
+  
+  /* Alturas das barras */
   --top-bar-height: 48px;
-  --bottom-bar-height: 48px;
+  --bottom-bar-height: 52px;
+  
+  /* Transições suaves */
   --transition-speed: 0.3s;
-  --font-family: 'Literata', serif;
 }
 
+/* Corpo da página */
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
@@ -22,9 +30,12 @@ body {
   width: 100vw;
   background: #ffffff;
   transition: background-color 0.3s;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Tela de upload */
+/* ==============================
+   TELA DE UPLOAD
+   ============================== */
 .upload-screen {
   display: flex;
   align-items: center;
@@ -33,6 +44,7 @@ body {
   background: #f5f5f5;
   transition: opacity 0.3s;
 }
+
 .upload-content {
   text-align: center;
   max-width: 400px;
@@ -40,22 +52,32 @@ body {
   background: white;
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  margin: 20px;
 }
+
 .upload-icon {
   color: #555;
   margin-bottom: 16px;
 }
+
 .upload-content h2 {
   margin-bottom: 8px;
   font-weight: 500;
+  color: #1a1a1a;
 }
+
 .upload-content p {
   color: #777;
   margin-bottom: 24px;
+  font-size: 14px;
 }
+
+/* Esconde o input file nativo */
 #file-input {
   display: none;
 }
+
+/* Botão primário */
 .primary-btn {
   background: #1a73e8;
   color: white;
@@ -64,50 +86,70 @@ body {
   border-radius: 8px;
   font-size: 16px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.1s;
+  font-weight: 500;
 }
+
 .primary-btn:hover {
   background: #1558b0;
 }
 
-/* Leitor */
+.primary-btn:active {
+  transform: scale(0.98);
+}
+
+/* ==============================
+   LEITOR PRINCIPAL
+   ============================== */
 .reader-container {
   display: flex;
   flex-direction: column;
   height: 100%;
   background: #ffffff;
 }
+
+/* Classe para esconder elementos */
 .hidden {
   display: none !important;
 }
 
-/* Barra superior */
+/* ==============================
+   BARRA SUPERIOR
+   ============================== */
 .top-bar {
   height: var(--top-bar-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 8px;
-  background: inherit;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 10;
-  transition: transform 0.3s, opacity 0.3s, background-color 0.3s;
-  backdrop-filter: blur(10px);
-  background: rgba(255,255,255,0.8);
+  transition: transform 0.3s ease, opacity 0.3s ease, background-color 0.3s;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255,255,255,0.85);
 }
+
+/* Tema escuro */
 body.theme-dark .top-bar {
-  background: rgba(18,18,18,0.8);
+  background: rgba(18,18,18,0.85);
 }
+
+/* Tema sépia */
 body.theme-sepia .top-bar {
-  background: rgba(244,236,216,0.8);
+  background: rgba(244,236,216,0.85);
 }
+
+/* Esconder barra superior */
 .top-bar.hidden-bar {
   transform: translateY(-100%);
   opacity: 0;
 }
+
+/* Título do livro na barra superior */
 .book-title {
   font-size: 16px;
   font-weight: 500;
@@ -117,6 +159,10 @@ body.theme-sepia .top-bar {
   max-width: 60%;
   color: inherit;
 }
+
+/* ==============================
+   BOTÕES DE ÍCONE
+   ============================== */
 .icon-btn {
   background: none;
   border: none;
@@ -128,27 +174,36 @@ body.theme-sepia .top-bar {
   justify-content: center;
   color: inherit;
   transition: background 0.2s;
-}
-.icon-btn:hover {
-  background: rgba(0,0,0,0.1);
-}
-body.theme-dark .icon-btn:hover {
-  background: rgba(255,255,255,0.15);
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Área de visualização */
+.icon-btn:hover {
+  background: rgba(0,0,0,0.08);
+}
+
+body.theme-dark .icon-btn:hover {
+  background: rgba(255,255,255,0.12);
+}
+
+body.theme-sepia .icon-btn:hover {
+  background: rgba(0,0,0,0.06);
+}
+
+/* ==============================
+   ÁREA DE VISUALIZAÇÃO DO EPUB
+   ============================== */
 .viewer {
   flex: 1;
   width: 100%;
-  height: calc(100% - var(--top-bar-height) - var(--bottom-bar-height));
-  margin-top: var(--top-bar-height);
-  margin-bottom: var(--bottom-bar-height);
   overflow: hidden;
   transition: padding 0.3s;
   background: inherit;
+  /* O padding será ajustado dinamicamente via JS */
 }
 
-/* Barra inferior */
+/* ==============================
+   BARRA INFERIOR
+   ============================== */
 .bottom-bar {
   height: var(--bottom-bar-height);
   display: flex;
@@ -158,35 +213,47 @@ body.theme-dark .icon-btn:hover {
   bottom: 0;
   left: 0;
   right: 0;
-  background: inherit;
-  backdrop-filter: blur(10px);
-  background: rgba(255,255,255,0.8);
   z-index: 10;
-  transition: transform 0.3s, opacity 0.3s, background-color 0.3s;
+  transition: transform 0.3s ease, opacity 0.3s ease, background-color 0.3s;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255,255,255,0.85);
   gap: 8px;
 }
+
 body.theme-dark .bottom-bar {
-  background: rgba(18,18,18,0.8);
+  background: rgba(18,18,18,0.85);
 }
+
 body.theme-sepia .bottom-bar {
-  background: rgba(244,236,216,0.8);
+  background: rgba(244,236,216,0.85);
 }
+
+/* Esconder barra inferior */
 .bottom-bar.hidden-bar {
   transform: translateY(100%);
   opacity: 0;
 }
+
+/* Container do slider de progresso */
 .progress-slider-container {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
-.progress-label, .page-info {
+
+/* Labels de progresso */
+.progress-label,
+.page-info {
   font-size: 12px;
   white-space: nowrap;
-  min-width: 35px;
+  min-width: 38px;
   color: inherit;
+  text-align: center;
 }
+
+/* Slider de progresso personalizado */
 #progress-slider {
   flex: 1;
   height: 4px;
@@ -195,122 +262,255 @@ body.theme-sepia .bottom-bar {
   background: #ccc;
   border-radius: 2px;
   outline: none;
+  cursor: pointer;
 }
+
+body.theme-dark #progress-slider {
+  background: #555;
+}
+
 #progress-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: #1a73e8;
   cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
 }
+
+#progress-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #1a73e8;
+  cursor: pointer;
+  border: 2px solid white;
+}
+
+/* Botão de marcador */
 .bookmark-btn svg {
   stroke: #2196F3;
   fill: none;
-  transition: fill 0.2s;
-}
-.bookmark-btn.active svg {
-  fill: #2196F3;
+  transition: fill 0.2s, stroke 0.2s;
 }
 
-/* Painel de configurações */
+/* Marcador ativo (preenchido) */
+.bookmark-btn.active svg {
+  fill: #2196F3;
+  stroke: #1976D2;
+}
+
+/* ==============================
+   PAINEL DE CONFIGURAÇÕES
+   ============================== */
 .settings-panel {
   position: fixed;
   inset: 0;
   z-index: 20;
 }
+
+/* Fundo escuro do modal */
 .settings-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.4);
-  animation: fadeIn 0.3s;
+  background: rgba(0,0,0,0.5);
+  animation: fadeIn 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
 }
+
+/* Conteúdo do painel (desktop: lado direito) */
 .settings-content {
   position: absolute;
   right: 0;
   top: 0;
   bottom: 0;
-  width: 320px;
+  width: 340px;
   max-width: 90vw;
   background: #fff;
-  box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.15);
   display: flex;
   flex-direction: column;
   animation: slideInRight 0.3s ease-out;
   border-radius: 16px 0 0 16px;
 }
+
 body.theme-dark .settings-content {
   background: #1e1e1e;
   color: #e0e0e0;
 }
+
 body.theme-sepia .settings-content {
   background: #f4ecd8;
   color: #3e3a37;
 }
+
+/* Cabeçalho do painel */
 .settings-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
+  padding: 16px 20px;
   border-bottom: 1px solid #eee;
 }
+
+body.theme-dark .settings-header {
+  border-bottom-color: #333;
+}
+
+body.theme-sepia .settings-header {
+  border-bottom-color: #d9ceb8;
+}
+
 .settings-header h3 {
   font-weight: 500;
+  font-size: 18px;
 }
+
+/* Abas de configuração */
 .settings-tabs {
   display: flex;
   overflow-x: auto;
   border-bottom: 1px solid #eee;
   padding: 0 8px;
+  -webkit-overflow-scrolling: touch;
 }
+
+body.theme-dark .settings-tabs {
+  border-bottom-color: #333;
+}
+
+body.theme-sepia .settings-tabs {
+  border-bottom-color: #d9ceb8;
+}
+
 .tab {
-  padding: 12px 16px;
+  padding: 12px 14px;
   border: none;
   background: none;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   color: inherit;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, color 0.2s;
   white-space: nowrap;
+  font-weight: 400;
 }
+
 .tab.active {
   border-bottom-color: #1a73e8;
   color: #1a73e8;
+  font-weight: 500;
 }
+
+/* Conteúdo das abas */
 .tab-content {
   display: none;
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 20px;
+  -webkit-overflow-scrolling: touch;
 }
+
 .tab-content.active {
   display: block;
 }
+
+/* ==============================
+   ELEMENTOS DAS CONFIGURAÇÕES
+   ============================== */
 .setting-group {
-  margin-bottom: 20px;
+  margin-bottom: 22px;
 }
+
 .setting-group label {
   display: block;
-  font-size: 14px;
-  margin-bottom: 6px;
+  font-size: 13px;
+  margin-bottom: 8px;
   color: inherit;
+  font-weight: 500;
 }
+
 .setting-group select,
 .setting-group input[type="range"] {
   width: 100%;
-  padding: 8px;
-  border-radius: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
   border: 1px solid #ddd;
-  background: inherit;
+  background: #fafafa;
   color: inherit;
+  font-size: 14px;
+  transition: border-color 0.2s;
 }
+
+body.theme-dark .setting-group select,
+body.theme-dark .setting-group input[type="range"] {
+  background: #2a2a2a;
+  border-color: #444;
+}
+
+body.theme-sepia .setting-group select,
+body.theme-sepia .setting-group input[type="range"] {
+  background: #ede3c8;
+  border-color: #c4b896;
+}
+
+.setting-group select:focus,
+.setting-group input[type="range"]:focus {
+  outline: none;
+  border-color: #1a73e8;
+}
+
+/* Slider personalizado */
+.setting-group input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: #ddd;
+  padding: 0;
+}
+
+body.theme-dark .setting-group input[type="range"] {
+  background: #444;
+}
+
+body.theme-sepia .setting-group input[type="range"] {
+  background: #c4b896;
+}
+
+.setting-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #1a73e8;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
+.setting-group input[type="range"]::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #1a73e8;
+  cursor: pointer;
+  border: 2px solid white;
+}
+
+/* ==============================
+   CARTÕES DE TEMA
+   ============================== */
 .theme-options {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
 }
+
 .theme-card {
   display: flex;
   flex-direction: column;
@@ -320,15 +520,23 @@ body.theme-sepia .settings-content {
   border-radius: 12px;
   padding: 12px;
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, transform 0.2s;
   color: inherit;
+  flex: 1;
+  min-width: 70px;
 }
+
+.theme-card:hover {
+  transform: translateY(-2px);
+}
+
 .theme-card.active {
   border-color: #1a73e8;
 }
+
 .theme-preview {
-  width: 80px;
-  height: 100px;
+  width: 70px;
+  height: 90px;
   border-radius: 8px;
   margin-bottom: 8px;
   display: flex;
@@ -336,47 +544,108 @@ body.theme-sepia .settings-content {
   justify-content: center;
   font-size: 12px;
   border: 1px solid #ccc;
+  font-weight: 500;
 }
-.toc-list, .bookmark-list {
+
+/* ==============================
+   LISTAS (TOC E MARCADORES)
+   ============================== */
+.toc-list,
+.bookmark-list {
   list-style: none;
 }
-.toc-list li, .bookmark-list li {
-  padding: 10px 0;
+
+.toc-list li,
+.bookmark-list li {
+  padding: 12px 0;
   border-bottom: 1px solid #eee;
   cursor: pointer;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 14px;
+  transition: background 0.2s;
+  -webkit-tap-highlight-color: transparent;
 }
+
+body.theme-dark .toc-list li,
+body.theme-dark .bookmark-list li {
+  border-bottom-color: #333;
+}
+
+body.theme-sepia .toc-list li,
+body.theme-sepia .bookmark-list li {
+  border-bottom-color: #d9ceb8;
+}
+
+.toc-list li:active,
+.bookmark-list li:active {
+  background: rgba(0,0,0,0.05);
+}
+
+/* Destaque do capítulo atual */
 .toc-list li.active {
   color: #1a73e8;
-  font-weight: 500;
+  font-weight: 600;
 }
+
+/* Botão de deletar marcador */
 .bookmark-list li button {
   background: none;
   border: none;
   color: #d32f2f;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 22px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
 }
+
+.bookmark-list li button:hover {
+  background: rgba(211,47,47,0.1);
+}
+
+/* Botão secundário (salvar posição manual) */
 .secondary-btn {
-  background: #e0e0e0;
+  background: #e8e8e8;
   border: none;
-  padding: 10px 16px;
-  border-radius: 6px;
+  padding: 12px 16px;
+  border-radius: 8px;
   cursor: pointer;
   width: 100%;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
 }
+
 body.theme-dark .secondary-btn {
   background: #333;
   color: #e0e0e0;
 }
 
-/* Responsivo: bottom sheet em mobile */
+body.theme-sepia .secondary-btn {
+  background: #d9ceb8;
+  color: #3e3a37;
+}
+
+.secondary-btn:hover {
+  background: #ddd;
+}
+
+body.theme-dark .secondary-btn:hover {
+  background: #444;
+}
+
+body.theme-sepia .secondary-btn:hover {
+  background: #c4b896;
+}
+
+/* ==============================
+   RESPONSIVO: MOBILE
+   ============================== */
 @media (max-width: 600px) {
+  /* Painel vira bottom sheet */
   .settings-content {
     top: auto;
     bottom: 0;
@@ -385,29 +654,36 @@ body.theme-dark .secondary-btn {
     width: 100%;
     max-width: 100%;
     height: 70vh;
-    border-radius: 16px 16px 0 0;
+    border-radius: 20px 20px 0 0;
     animation: slideUp 0.3s ease-out;
   }
+  
+  /* Esconder respiro em desktop */
+  .mobile-respiro {
+    display: block;
+  }
 }
+
+@media (min-width: 601px) {
+  .mobile-respiro {
+    display: block;
+  }
+}
+
+/* ==============================
+   ANIMAÇÕES
+   ============================== */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
 @keyframes slideInRight {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 }
+
 @keyframes slideUp {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
-}
-
-/* Transições para barras */
-.hidden-bar {
-  transform: translateY(-100%);
-  opacity: 0;
-  pointer-events: none;
-}
-.bottom-bar.hidden-bar {
-  transform: translateY(100%);
 }
