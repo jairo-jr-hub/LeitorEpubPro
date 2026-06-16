@@ -1,414 +1,642 @@
-const dbName = 'EpubNativeDB';
-const storeName = 'library';
-let db;
+/**
+ * Leitor EPUB estático - Google Play Livros style
+ * Utiliza EPUB.js, IndexedDB e LocalStorage
+ */
 
-// Subi a versão para 4 para garantir que o navegador limpe qualquer cache antigo dos seus testes
-function initDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(dbName, 4); 
-        request.onupgradeneeded = (e) => {
-            const database = e.target.result;
-            if (!database.objectStoreNames.contains(storeName)) {
-                database.createObjectStore(storeName, { keyPath: 'id' });
-            }
-        };
-        request.onsuccess = (e) => { db = e.target.result; resolve(); };
-        request.onerror = (e) => reject(e.target.error);
-    });
-}
+// Constantes de banco de dados
+const DB_NAME = 'EpubReaderDB';
+const DB_STORE = 'books';
+const LAST_BOOK_KEY = 'lastEpub';
+const SETTINGS_PREFIX = 'reader-';
 
-function saveBookToDB(bookData) {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([storeName], 'readwrite');
-        const store = transaction.objectStore(storeName);
-        store.put(bookData).onsuccess = () => resolve();
-        transaction.onerror = (e) => reject(e.target.error);
-    });
-}
+// Elementos DOM principais
+const uploadScreen = document.getElementById('upload-screen');
+const readerContainer = document.getElementById('reader-container');
+const viewer = document.getElementById('viewer');
+const fileInput = document.getElementById('file-input');
+const fileSelectBtn = document.getElementById('file-select-btn');
+const closeBtn = document.getElementById('close-btn');
+const menuBtn = document.getElementById('menu-btn');
+const settingsPanel = document.getElementById('settings-panel');
+const closeSettingsBtn = document.getElementById('close-settings');
+const settingsBackdrop = document.querySelector('.settings-backdrop');
+const topBar = document.getElementById('top-bar');
+const bottomBar = document.getElementById('bottom-bar');
+const bookTitleElem = document.getElementById('book-title');
+const progressSlider = document.getElementById('progress-slider');
+const progressLabel = document.getElementById('progress-label');
+const pageInfo = document.getElementById('page-info');
+const bookmarkToggleBtn = document.getElementById('bookmark-toggle-btn');
+const bookmarkIcon = document.getElementById('bookmark-icon');
+const tocList = document.getElementById('toc-list');
+const bookmarkList = document.getElementById('bookmark-list');
+const addManualBookmarkBtn = document.getElementById('add-manual-bookmark');
 
-function getBooksFromDB() {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([storeName], 'readonly');
-        const store = transaction.objectStore(storeName);
-        const request = store.getAll();
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = (e) => reject(e.target.error);
-    });
-}
+// Abas do painel
+const tabButtons = document.querySelectorAll('.tab');
+const tabContents = document.querySelectorAll('.tab-content');
 
-function getBookById(id) {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([storeName], 'readonly');
-        const store = transaction.objectStore(storeName);
-        const request = store.get(id);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = (e) => reject(e.target.error);
-    });
-}
-
-function deleteBookFromDB(id) {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([storeName], 'readwrite');
-        const store = transaction.objectStore(storeName);
-        const request = store.delete(id);
-        request.onsuccess = () => resolve();
-        request.onerror = (e) => reject(e.target.error);
-    });
-}
-
-let currentEpub = null;
+// Variáveis de estado
+let book = null;
 let rendition = null;
-let activeBookId = null;
-let isUiVisible = false;
-let locationsGenerated = false;
-
-const state = {
-    font: localStorage.getItem('epub_font') || 'Original',
-    size: parseInt(localStorage.getItem('epub_size')) || 100,
-    lineHeight: parseInt(localStorage.getItem('epub_line')) || 120,
-    margin: parseInt(localStorage.getItem('epub_margin')) || 5, // em porcentagem
-    wordSpacing: parseInt(localStorage.getItem('epub_word_spacing')) || 0, // em px
-    theme: localStorage.getItem('epub_theme') || 'sepia'
+let currentLocationCFI = null;
+let currentHref = null;
+let bookmarks = [];
+let settings = {
+  theme: 'clear',
+  font: 'Literata',
+  fontSize: 100,
+  lineHeight: 1.5,
+  wordSpacing: 0,
+  margin: 5,
+  justify: 'justify',
+  topPadding: 0,
+  bottomPadding: 0
 };
 
-const dom = {
-    libraryView: document.getElementById('library-view'),
-    readerView: document.getElementById('reader-view'),
-    bookGrid: document.getElementById('book-grid'),
-    emptyState: document.getElementById('empty-state'),
-    fileInput: document.getElementById('epub-input'),
-    btnAddBook: document.getElementById('btn-add-book'),
-    loadingOverlay: document.getElementById('loading-overlay'),
-    uiLayer: document.getElementById('ui-layer'),
-    btnCloseReader: document.getElementById('btn-close-reader'),
-    configModal: document.getElementById('config-modal'),
-    btnConfig: document.getElementById('btn-config'),
-    progressSlider: document.getElementById('progress-slider'),
-    pageCount: document.getElementById('page-count'),
-    tabBtns: document.querySelectorAll('.tab-btn'),
-    tabPanes: document.querySelectorAll('.tab-pane'),
-    fontItems: document.querySelectorAll('.font-item'),
-    themeBoxes: document.querySelectorAll('.theme-box'),
-    btnSizeUp: document.getElementById('btn-size-up'),
-    btnSizeDown: document.getElementById('btn-size-down'),
-    sizeDisplay: document.getElementById('size-display'),
-    btnLineUp: document.getElementById('btn-line-up'),
-    btnLineDown: document.getElementById('btn-line-down'),
-    lineDisplay: document.getElementById('line-display'),
-    btnMarginUp: document.getElementById('btn-margin-up'),
-    btnMarginDown: document.getElementById('btn-margin-down'),
-    marginDisplay: document.getElementById('margin-display'),
-    btnWordUp: document.getElementById('btn-word-up'),
-    btnWordDown: document.getElementById('btn-word-down'),
-    wordDisplay: document.getElementById('word-display')
-};
+// Inicialização do IndexedDB
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(DB_STORE)) {
+        db.createObjectStore(DB_STORE, { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
 
-document.addEventListener('DOMContentLoaded', async () => {
-    await initDB();
-    renderLibrary();
-});
+async function saveEpubToDB(arrayBuffer, fileName) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    const store = tx.objectStore(DB_STORE);
+    const record = { id: LAST_BOOK_KEY, data: arrayBuffer, fileName };
+    store.put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
 
-dom.btnAddBook.addEventListener('click', () => dom.fileInput.click());
+async function loadEpubFromDB() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readonly');
+    const store = tx.objectStore(DB_STORE);
+    const request = store.get(LAST_BOOK_KEY);
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
 
-dom.fileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+async function deleteEpubFromDB() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    const store = tx.objectStore(DB_STORE);
+    store.delete(LAST_BOOK_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
 
-    dom.loadingOverlay.classList.remove('hidden');
+// Carregar/Salvar configurações localStorage
+function loadSettings() {
+  const keys = ['theme','font','fontSize','lineHeight','wordSpacing','margin','justify','topPadding','bottomPadding'];
+  keys.forEach(key => {
+    const stored = localStorage.getItem(SETTINGS_PREFIX + key);
+    if (stored !== null) {
+      if (key === 'fontSize' || key === 'lineHeight' || key === 'wordSpacing' || key === 'margin' || key === 'topPadding' || key === 'bottomPadding') {
+        settings[key] = parseFloat(stored);
+      } else {
+        settings[key] = stored;
+      }
+    }
+  });
+}
 
+function saveSetting(key, value) {
+  settings[key] = value;
+  localStorage.setItem(SETTINGS_PREFIX + key, value);
+}
+
+function loadBookmarks() {
+  const stored = localStorage.getItem(SETTINGS_PREFIX + 'bookmarks');
+  if (stored) {
     try {
-        const arrayBuffer = await file.arrayBuffer();
-        const tempBook = ePub(arrayBuffer);
-        await tempBook.ready;
-        
-        const metadata = await tempBook.loaded.metadata;
-        const title = metadata.title || file.name.replace('.epub', '');
-        let coverUrl = '';
-        try { coverUrl = await tempBook.coverUrl(); } catch(err) { console.log("Capa não encontrada"); }
-
-        const bookRecord = {
-            id: Date.now().toString(),
-            title: title,
-            cover: coverUrl, 
-            blob: arrayBuffer,
-            lastCfi: null
-        };
-
-        await saveBookToDB(bookRecord);
-        await renderLibrary();
-
-    } catch (error) {
-        alert("Erro ao importar o livro. Verifique se é um EPUB válido.");
-        console.error(error);
-    } finally {
-        dom.loadingOverlay.classList.add('hidden');
-        dom.fileInput.value = ''; 
+      bookmarks = JSON.parse(stored);
+    } catch (e) {
+      bookmarks = [];
     }
-});
-
-async function renderLibrary() {
-    const books = await getBooksFromDB();
-    dom.bookGrid.innerHTML = '';
-    
-    if (books.length === 0) {
-        dom.bookGrid.appendChild(dom.emptyState);
-        dom.emptyState.classList.remove('hidden');
-        return;
-    }
-
-    books.forEach(book => {
-        const card = document.createElement('div');
-        card.className = 'book-card';
-        const coverObj = book.cover ? `<img src="${book.cover}" class="book-cover">` : `<div class="book-cover">${book.title}</div>`;
-        
-        card.innerHTML = `
-            <button class="delete-book-btn" title="Excluir livro">✕</button>
-            <div class="card-content">
-                ${coverObj}
-                <span class="book-title">${book.title}</span>
-            </div>
-        `;
-        
-        const deleteBtn = card.querySelector('.delete-book-btn');
-        deleteBtn.addEventListener('click', async (e) => {
-            e.stopPropagation(); 
-            if (confirm(`Tem certeza que deseja excluir "${book.title}" da sua estante?`)) {
-                await deleteBookFromDB(book.id);
-                await renderLibrary(); 
-            }
-        });
-
-        const content = card.querySelector('.card-content');
-        content.addEventListener('click', () => openReader(book.id));
-        
-        dom.bookGrid.appendChild(card);
-    });
+  }
 }
 
-async function openReader(bookId) {
-    dom.loadingOverlay.classList.remove('hidden');
-    const bookData = await getBookById(bookId);
-    if (!bookData) return;
-
-    activeBookId = bookId;
-    dom.libraryView.classList.add('hidden');
-    dom.readerView.classList.remove('hidden');
-    
-    if (currentEpub) { currentEpub.destroy(); }
-    
-    currentEpub = ePub(bookData.blob);
-    rendition = currentEpub.renderTo("viewer", {
-        width: "100%", height: "100%",
-        spread: "none", manager: "continuous", flow: "paginated"
-    });
-
-    // Registra os Temas com prioridade máxima (!important)
-    rendition.themes.register("light", { "body": { "background": "#ffffff !important", "color": "#000000 !important" }});
-    rendition.themes.register("sepia", { "body": { "background": "#fbf6e8 !important", "color": "#2c2b29 !important" }});
-    rendition.themes.register("dark", { "body": { "background": "#000000 !important", "color": "#e0e0e0 !important" }});
-
-    // Injeta o CSS do Google Fonts diretamente no iframe do Epub.js
-    rendition.hooks.content.register(function(contents) {
-        contents.addStylesheet("https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap");
-    });
-
-    applyPreferences();
-
-    const displayOptions = bookData.lastCfi ? { cfi: bookData.lastCfi } : undefined;
-
-    rendition.display(displayOptions).then(() => {
-        return currentEpub.locations.generate(1600);
-    }).then(locations => {
-        locationsGenerated = true;
-        dom.progressSlider.max = currentEpub.locations.total;
-        updateProgress();
-        dom.loadingOverlay.classList.add('hidden');
-    });
-
-    rendition.on("relocated", location => {
-        getBookById(activeBookId).then(book => {
-            book.lastCfi = location.start.cfi;
-            saveBookToDB(book);
-        });
-        if (locationsGenerated) updateProgress();
-    });
-
-    // ==========================================
-    // NOVA LÓGICA DE NAVEGAÇÃO E CLIQUES
-    // ==========================================
-    function handleScreenInteraction(e) {
-        // Se a interface estiver aberta, um clique na tela APENAS fecha a interface.
-        if (isUiVisible) {
-            isUiVisible = false;
-            dom.uiLayer.classList.add('hidden');
-            dom.configModal.classList.add('hidden');
-            return;
-        }
-
-        const screenWidth = window.innerWidth;
-        // Pega a coordenada X do clique (suporta mouse e touch do celular)
-        const clientX = e.type.includes('touch') ? e.changedTouches[0].clientX : e.clientX;
-
-        if (clientX === undefined) return;
-
-        // 30% da esquerda (Volta), 30% da direita (Avança), Centro (Menu)
-        if (clientX < screenWidth * 0.3) {
-            rendition.prev();
-        } else if (clientX > screenWidth * 0.7) {
-            rendition.next();
-        } else {
-            isUiVisible = true;
-            dom.uiLayer.classList.remove('hidden');
-        }
-    }
-
-    // Usamos apenas o evento 'click' nativo para evitar disparo duplo em celulares
-    rendition.on("click", (e) => {
-        handleScreenInteraction(e);
-    });
-
-    // Adiciona suporte às setas do teclado dentro do iframe (para testes no PC)
-    rendition.on("keyup", (e) => {
-        if (e.key === "ArrowLeft") rendition.prev();
-        if (e.key === "ArrowRight") rendition.next();
-    });
+function saveBookmarks() {
+  localStorage.setItem(SETTINGS_PREFIX + 'bookmarks', JSON.stringify(bookmarks));
 }
 
-// Adiciona suporte às setas do teclado na tela principal
-document.addEventListener("keyup", (e) => {
-    if (!dom.readerView.classList.contains('hidden') && rendition) {
-        if (e.key === "ArrowLeft") rendition.prev();
-        if (e.key === "ArrowRight") rendition.next();
-    }
-});
-
-dom.btnCloseReader.addEventListener('click', () => {
-    dom.readerView.classList.add('hidden');
-    dom.libraryView.classList.remove('hidden');
-    dom.uiLayer.classList.add('hidden');
-    dom.configModal.classList.add('hidden');
-    isUiVisible = false;
-    renderLibrary();
-});
-
-function updateProgress() {
-    if (!locationsGenerated) return;
-    const currentLocation = rendition.currentLocation();
-    if (currentLocation && currentLocation.start) {
-        const percentage = currentEpub.locations.percentageFromCfi(currentLocation.start.cfi);
-        const currentPage = Math.round(percentage * currentEpub.locations.total) || 1;
-        dom.progressSlider.value = currentPage;
-        dom.pageCount.textContent = `${currentPage} / ${currentEpub.locations.total}`;
-    }
+function loadProgress() {
+  return localStorage.getItem(SETTINGS_PREFIX + 'progress');
 }
 
-dom.progressSlider.addEventListener('change', e => {
-    if (!locationsGenerated) return;
-    const cfi = currentEpub.locations.cfiFromPercentage(e.target.value / currentEpub.locations.total);
-    rendition.display(cfi);
-});
-
-dom.btnConfig.addEventListener('click', () => dom.configModal.classList.toggle('hidden'));
-
-dom.tabBtns.forEach(btn => {
-    btn.addEventListener('click', e => {
-        dom.tabBtns.forEach(b => b.classList.remove('active'));
-        dom.tabPanes.forEach(p => p.classList.add('hidden', 'active'));
-        e.target.classList.add('active');
-        document.getElementById(e.target.dataset.target).classList.remove('hidden');
-    });
-});
-
-dom.fontItems.forEach(item => {
-    item.addEventListener('click', e => {
-        dom.fontItems.forEach(f => f.classList.remove('active'));
-        e.currentTarget.classList.add('active');
-        state.font = e.currentTarget.dataset.font;
-        saveAndApply();
-    });
-});
-
-dom.themeBoxes.forEach(box => {
-    box.addEventListener('click', e => {
-        dom.themeBoxes.forEach(b => { b.textContent = ''; b.classList.remove('active-theme'); });
-        e.currentTarget.textContent = '✓';
-        e.currentTarget.classList.add('active-theme');
-        state.theme = e.currentTarget.dataset.theme;
-        saveAndApply();
-    });
-});
-
-// Controles da UI (Tamanho, Linhas, Margens e Palavras)
-dom.btnSizeUp.addEventListener('click', () => { state.size = Math.min(300, state.size + 10); saveAndApply(); });
-dom.btnSizeDown.addEventListener('click', () => { state.size = Math.max(50, state.size - 10); saveAndApply(); });
-
-dom.btnLineUp.addEventListener('click', () => { state.lineHeight = Math.min(200, state.lineHeight + 10); saveAndApply(); });
-dom.btnLineDown.addEventListener('click', () => { state.lineHeight = Math.max(100, state.lineHeight - 10); saveAndApply(); });
-
-dom.btnMarginUp.addEventListener('click', () => { state.margin = Math.min(25, state.margin + 2); saveAndApply(); });
-dom.btnMarginDown.addEventListener('click', () => { state.margin = Math.max(0, state.margin - 2); saveAndApply(); });
-
-dom.btnWordUp.addEventListener('click', () => { state.wordSpacing = Math.min(10, state.wordSpacing + 1); saveAndApply(); });
-dom.btnWordDown.addEventListener('click', () => { state.wordSpacing = Math.max(0, state.wordSpacing - 1); saveAndApply(); });
-
-function saveAndApply() {
-    localStorage.setItem('epub_font', state.font);
-    localStorage.setItem('epub_size', state.size);
-    localStorage.setItem('epub_line', state.lineHeight);
-    localStorage.setItem('epub_margin', state.margin);
-    localStorage.setItem('epub_word_spacing', state.wordSpacing);
-    localStorage.setItem('epub_theme', state.theme);
-    applyPreferences();
+function saveProgress(cfi) {
+  localStorage.setItem(SETTINGS_PREFIX + 'progress', cfi);
 }
 
-function applyPreferences() {
-    if (!rendition) return;
+// Atualizar meta theme-color
+function updateThemeColor() {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) return;
+  const theme = settings.theme;
+  if (theme === 'dark') meta.content = '#121212';
+  else if (theme === 'sepia') meta.content = '#f4ecd8';
+  else meta.content = '#ffffff';
+}
 
-    dom.sizeDisplay.textContent = `${state.size}%`;
-    dom.lineDisplay.textContent = `${state.lineHeight}%`;
-    dom.marginDisplay.textContent = `${state.margin}%`;
-    dom.wordDisplay.textContent = `${state.wordSpacing}px`;
+// Aplicar classe de tema ao body
+function applyBodyTheme() {
+  document.body.className = '';
+  if (settings.theme === 'dark') document.body.classList.add('theme-dark');
+  else if (settings.theme === 'sepia') document.body.classList.add('theme-sepia');
+}
 
-    dom.fontItems.forEach(f => f.classList.toggle('active', f.dataset.font === state.font));
-    dom.themeBoxes.forEach(t => {
-        if(t.dataset.theme === state.theme) { t.textContent = '✓'; t.classList.add('active-theme'); }
-        else { t.textContent = ''; t.classList.remove('active-theme'); }
+// Registrar e aplicar temas do EPUB.js
+function applyEpubTheme() {
+  if (!rendition) return;
+  const themes = rendition.themes;
+  // Registrar temas base
+  themes.register('clear', {
+    body: {
+      background: '#ffffff',
+      color: '#000000'
+    }
+  });
+  themes.register('dark', {
+    body: {
+      background: '#121212',
+      color: '#e0e0e0'
+    }
+  });
+  themes.register('sepia', {
+    body: {
+      background: '#f4ecd8',
+      color: '#3e3a37'
+    }
+  });
+
+  // Selecionar tema
+  themes.select(settings.theme);
+
+  // Aplicar personalizações de texto
+  applyTextSettings();
+}
+
+function applyTextSettings() {
+  if (!rendition) return;
+  const justify = settings.justify === 'justify' ? 'justify' : 'left';
+  const marginPercent = settings.margin + '%';
+  
+  rendition.themes.override('*', {
+    body: {
+      'font-family': `${settings.font}, serif`,
+      'font-size': `${settings.fontSize}%`,
+      'line-height': settings.lineHeight,
+      'word-spacing': `${settings.wordSpacing}px`,
+      'text-align': justify,
+      'padding-left': marginPercent,
+      'padding-right': marginPercent
+    }
+  });
+}
+
+// Atualizar padding do viewer (safe area + respiros)
+function updateViewerPadding() {
+  const style = getComputedStyle(document.documentElement);
+  const safeTop = parseFloat(style.getPropertyValue('--safe-inset-top')) || 0;
+  const safeBottom = parseFloat(style.getPropertyValue('--safe-inset-bottom')) || 0;
+  const topPad = safeTop + settings.topPadding;
+  const bottomPad = safeBottom + settings.bottomPadding;
+  viewer.style.paddingTop = topPad + 'px';
+  viewer.style.paddingBottom = bottomPad + 'px';
+}
+
+// Configurar listeners de eventos
+function setupEventListeners() {
+  // Upload
+  fileSelectBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', handleFileSelect);
+  // Drag and drop na tela de upload
+  uploadScreen.addEventListener('dragover', (e) => e.preventDefault());
+  uploadScreen.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file && file.name.endsWith('.epub')) {
+      processEpubFile(file);
+    }
+  });
+
+  // Fechar livro
+  closeBtn.addEventListener('click', closeBook);
+
+  // Menu de configurações
+  menuBtn.addEventListener('click', openSettings);
+  closeSettingsBtn.addEventListener('click', closeSettings);
+  settingsBackdrop.addEventListener('click', closeSettings);
+
+  // Toque na área de leitura para alternar barras
+  viewer.addEventListener('click', toggleBars);
+
+  // Slider de progresso
+  progressSlider.addEventListener('input', onProgressSliderInput);
+
+  // Botão de marcador
+  bookmarkToggleBtn.addEventListener('click', toggleBookmark);
+
+  // Abas
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const tab = e.target.dataset.tab;
+      switchTab(tab);
+    });
+  });
+
+  // Configurações de tema
+  document.querySelectorAll('.theme-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      const theme = e.currentTarget.dataset.theme;
+      changeTheme(theme);
+    });
+  });
+
+  // Configurações de texto
+  document.getElementById('font-family-select').addEventListener('change', (e) => {
+    saveSetting('font', e.target.value);
+    applyTextSettings();
+  });
+  document.getElementById('font-size-slider').addEventListener('input', (e) => {
+    const val = e.target.value;
+    document.getElementById('font-size-value').textContent = val + '%';
+    saveSetting('fontSize', parseInt(val));
+    applyTextSettings();
+  });
+  document.getElementById('line-height-slider').addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value).toFixed(2);
+    document.getElementById('line-height-value').textContent = val;
+    saveSetting('lineHeight', parseFloat(val));
+    applyTextSettings();
+  });
+  document.getElementById('word-spacing-slider').addEventListener('input', (e) => {
+    const val = e.target.value;
+    document.getElementById('word-spacing-value').textContent = val + 'px';
+    saveSetting('wordSpacing', parseFloat(val));
+    applyTextSettings();
+  });
+  document.getElementById('margin-slider').addEventListener('input', (e) => {
+    const val = e.target.value;
+    document.getElementById('margin-value').textContent = val + '%';
+    saveSetting('margin', parseInt(val));
+    applyTextSettings();
+  });
+  document.getElementById('justify-select').addEventListener('change', (e) => {
+    saveSetting('justify', e.target.value);
+    applyTextSettings();
+  });
+  document.getElementById('top-padding-slider').addEventListener('input', (e) => {
+    const val = e.target.value;
+    document.getElementById('top-padding-value').textContent = val + 'px';
+    saveSetting('topPadding', parseInt(val));
+    updateViewerPadding();
+  });
+  document.getElementById('bottom-padding-slider').addEventListener('input', (e) => {
+    const val = e.target.value;
+    document.getElementById('bottom-padding-value').textContent = val + 'px';
+    saveSetting('bottomPadding', parseInt(val));
+    updateViewerPadding();
+  });
+
+  // Adicionar marcador manual
+  addManualBookmarkBtn.addEventListener('click', addManualBookmark);
+}
+
+// Manipuladores
+async function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) await processEpubFile(file);
+}
+
+async function processEpubFile(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  await saveEpubToDB(arrayBuffer, file.name);
+  await openEpub(arrayBuffer, file.name);
+}
+
+async function openEpub(arrayBuffer, fileName) {
+  try {
+    // Criar URL blob para o EPUB.js
+    const blob = new Blob([arrayBuffer], { type: 'application/epub+zip' });
+    const url = URL.createObjectURL(blob);
+    
+    book = ePub(url);
+    rendition = book.renderTo(viewer, {
+      flow: 'scrolled',
+      width: '100%',
+      height: '100%'
     });
 
-    rendition.themes.select(state.theme);
-    
-    if (state.theme === 'dark') updateThemeVars('#000000', '#e0e0e0', '#1c1c1e', '#ffffff', '#333333', '#2c2c2e');
-    else if (state.theme === 'sepia') updateThemeVars('#fbf6e8', '#2c2b29', '#ffffff', '#333333', '#e0e0e0', '#f5f5f5');
-    else updateThemeVars('#ffffff', '#000000', '#f5f5f5', '#000000', '#cccccc', '#e9e9e9');
+    // Exibir título
+    bookTitleElem.textContent = fileName.replace('.epub', '') || 'Livro';
 
-    rendition.themes.fontSize(`${state.size}%`);
-    rendition.themes.override('line-height', `${state.lineHeight}%`);
-    rendition.themes.override('padding-left', `${state.margin}%`);
-    rendition.themes.override('padding-right', `${state.margin}%`);
-    rendition.themes.override('word-spacing', `${state.wordSpacing}px`);
-    
-    if (state.font === 'Original') {
-        rendition.themes.font(''); 
-    } else if (state.font === 'Literata' || state.font === 'Georgia') {
-        rendition.themes.font(`'${state.font}', serif`); 
+    // Carregar metadados (opcional)
+    book.loaded.metadata.then(meta => {
+      if (meta.title) bookTitleElem.textContent = meta.title;
+    }).catch(() => {});
+
+    // Gerar locations para progresso
+    await book.ready;
+    await book.locations.generate(1600);
+
+    // Aplicar tema e configurações
+    applyEpubTheme();
+    updateViewerPadding();
+    updateThemeColor();
+    applyBodyTheme();
+
+    // Evento de mudança de localização
+    rendition.on('relocated', onRelocated);
+
+    // Recuperar último progresso
+    const savedCFI = loadProgress();
+    if (savedCFI) {
+      rendition.display(savedCFI).catch(() => {
+        rendition.display();
+      });
     } else {
-        rendition.themes.font(`'${state.font}', sans-serif`); 
+      rendition.display();
     }
-    
-    if (locationsGenerated) {
-        currentEpub.locations.generate(1600).then(() => {
-            dom.progressSlider.max = currentEpub.locations.total;
-            updateProgress();
-        });
-    }
+
+    // Carregar TOC
+    loadTOC();
+
+    // Mostrar leitor, esconder upload
+    uploadScreen.classList.add('hidden');
+    readerContainer.classList.remove('hidden');
+
+    // Iniciar com barras visíveis
+    topBar.classList.remove('hidden-bar');
+    bottomBar.classList.remove('hidden-bar');
+
+    // Ajustar valores dos sliders de configuração
+    syncSettingsUI();
+  } catch (err) {
+    alert('Erro ao abrir o EPUB: ' + err.message);
+    console.error(err);
+  }
 }
 
-function updateThemeVars(bg, text, uiBg, uiText, border, actionsBg) {
-    const root = document.documentElement;
-    root.style.setProperty('--bg-color', bg);
-    root.style.setProperty('--text-color', text);
-    root.style.setProperty('--ui-bg', uiBg);
-    root.style.setProperty('--ui-text', uiText);
-    root.style.setProperty('--ui-border', border);
-    root.style.setProperty('--ui-actions-bg', actionsBg);
+function syncSettingsUI() {
+  document.getElementById('font-family-select').value = settings.font;
+  document.getElementById('font-size-slider').value = settings.fontSize;
+  document.getElementById('font-size-value').textContent = settings.fontSize + '%';
+  document.getElementById('line-height-slider').value = settings.lineHeight;
+  document.getElementById('line-height-value').textContent = settings.lineHeight;
+  document.getElementById('word-spacing-slider').value = settings.wordSpacing;
+  document.getElementById('word-spacing-value').textContent = settings.wordSpacing + 'px';
+  document.getElementById('margin-slider').value = settings.margin;
+  document.getElementById('margin-value').textContent = settings.margin + '%';
+  document.getElementById('justify-select').value = settings.justify;
+  document.getElementById('top-padding-slider').value = settings.topPadding;
+  document.getElementById('top-padding-value').textContent = settings.topPadding + 'px';
+  document.getElementById('bottom-padding-slider').value = settings.bottomPadding;
+  document.getElementById('bottom-padding-value').textContent = settings.bottomPadding + 'px';
+
+  // Destacar tema ativo
+  document.querySelectorAll('.theme-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.theme === settings.theme);
+  });
 }
+
+function onRelocated(location) {
+  currentLocationCFI = location.start.cfi;
+  currentHref = location.start.href;
+
+  // Atualizar progresso
+  const percent = book.locations.percentageFromCfi(currentLocationCFI) || 0;
+  const percentRounded = Math.round(percent * 10) / 10;
+  progressSlider.value = percentRounded;
+  progressLabel.textContent = percentRounded + '%';
+
+  // Estimativa de página (100 páginas totais)
+  const totalPages = 100;
+  const currentPage = Math.max(1, Math.round((percentRounded / 100) * totalPages));
+  pageInfo.textContent = `Pág. ${currentPage}/${totalPages}`;
+
+  // Salvar progresso automaticamente (debounce)
+  clearTimeout(window._saveProgressTimeout);
+  window._saveProgressTimeout = setTimeout(() => {
+    saveProgress(currentLocationCFI);
+  }, 500);
+
+  // Atualizar estado do botão de marcador
+  updateBookmarkButtonState();
+
+  // Destacar capítulo atual no TOC
+  highlightCurrentChapter();
+}
+
+function loadTOC() {
+  if (!book || !book.navigation) return;
+  const toc = book.navigation.toc;
+  tocList.innerHTML = '';
+  toc.forEach(item => {
+    const li = document.createElement('li');
+    li.textContent = item.label;
+    li.dataset.href = item.href;
+    li.addEventListener('click', () => {
+      rendition.display(item.href);
+      closeSettings();
+    });
+    tocList.appendChild(li);
+  });
+}
+
+function highlightCurrentChapter() {
+  if (!currentHref) return;
+  const items = tocList.querySelectorAll('li');
+  items.forEach(li => {
+    li.classList.toggle('active', li.dataset.href === currentHref);
+  });
+}
+
+// Controle de barras
+function toggleBars(e) {
+  // Evitar fechar ao clicar em controles
+  if (e.target.closest('button') || e.target.closest('input')) return;
+  const topHidden = topBar.classList.contains('hidden-bar');
+  if (topHidden) {
+    topBar.classList.remove('hidden-bar');
+    bottomBar.classList.remove('hidden-bar');
+  } else {
+    topBar.classList.add('hidden-bar');
+    bottomBar.classList.add('hidden-bar');
+  }
+}
+
+// Configurações e temas
+function changeTheme(theme) {
+  saveSetting('theme', theme);
+  rendition.themes.select(theme);
+  updateThemeColor();
+  applyBodyTheme();
+  // Atualizar seleção visual
+  document.querySelectorAll('.theme-card').forEach(c => c.classList.toggle('active', c.dataset.theme === theme));
+}
+
+function openSettings() {
+  settingsPanel.classList.remove('hidden');
+  // Exibir abas padrão
+  switchTab('themes');
+}
+
+function closeSettings() {
+  settingsPanel.classList.add('hidden');
+}
+
+function switchTab(tabId) {
+  tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
+  tabContents.forEach(content => content.classList.toggle('active', content.id === `tab-${tabId}`));
+  // Atualizar listas se necessário
+  if (tabId === 'bookmarks') renderBookmarks();
+  if (tabId === 'chapters') loadTOC();
+}
+
+// Marcadores
+function toggleBookmark() {
+  if (!currentLocationCFI) return;
+  const existingIndex = bookmarks.findIndex(b => b.cfi === currentLocationCFI);
+  if (existingIndex > -1) {
+    // Remover
+    bookmarks.splice(existingIndex, 1);
+  } else {
+    // Adicionar
+    const chapterTitle = getCurrentChapterTitle();
+    const percent = book.locations.percentageFromCfi(currentLocationCFI) || 0;
+    bookmarks.push({
+      cfi: currentLocationCFI,
+      percent: Math.round(percent * 10) / 10,
+      chapter: chapterTitle,
+      time: new Date().toISOString()
+    });
+  }
+  saveBookmarks();
+  updateBookmarkButtonState();
+  // Atualizar lista se visível
+  if (document.getElementById('tab-bookmarks').classList.contains('active')) {
+    renderBookmarks();
+  }
+}
+
+function addManualBookmark() {
+  if (!currentLocationCFI) return;
+  // Mesmo comportamento de adicionar marcador, mas forçando adição mesmo que exista
+  const existingIndex = bookmarks.findIndex(b => b.cfi === currentLocationCFI);
+  if (existingIndex > -1) {
+    // Já existe, mas podemos recriar com timestamp novo (opcional)
+    bookmarks[existingIndex].time = new Date().toISOString();
+  } else {
+    const chapterTitle = getCurrentChapterTitle();
+    const percent = book.locations.percentageFromCfi(currentLocationCFI) || 0;
+    bookmarks.push({
+      cfi: currentLocationCFI,
+      percent: Math.round(percent * 10) / 10,
+      chapter: chapterTitle,
+      time: new Date().toISOString()
+    });
+  }
+  saveBookmarks();
+  updateBookmarkButtonState();
+  renderBookmarks();
+}
+
+function updateBookmarkButtonState() {
+  if (!currentLocationCFI) return;
+  const isBookmarked = bookmarks.some(b => b.cfi === currentLocationCFI);
+  bookmarkToggleBtn.classList.toggle('active', isBookmarked);
+  // O ícone muda fill via CSS
+}
+
+function renderBookmarks() {
+  bookmarkList.innerHTML = '';
+  bookmarks.slice().reverse().forEach((bm, index) => {
+    const li = document.createElement('li');
+    const info = document.createElement('span');
+    info.textContent = `${bm.chapter || 'Local'} - ${bm.percent}%`;
+    info.addEventListener('click', () => {
+      rendition.display(bm.cfi);
+      closeSettings();
+    });
+    const delBtn = document.createElement('button');
+    delBtn.innerHTML = '&times;';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      bookmarks.splice(bookmarks.length - 1 - index, 1);
+      saveBookmarks();
+      updateBookmarkButtonState();
+      renderBookmarks();
+    });
+    li.appendChild(info);
+    li.appendChild(delBtn);
+    bookmarkList.appendChild(li);
+  });
+}
+
+function getCurrentChapterTitle() {
+  if (!book || !book.navigation || !currentHref) return '';
+  const toc = book.navigation.toc;
+  const item = toc.find(i => i.href === currentHref);
+  return item ? item.label : '';
+}
+
+// Slider de progresso
+function onProgressSliderInput(e) {
+  const percent = parseFloat(e.target.value);
+  if (!isNaN(percent) && book && book.locations) {
+    const cfi = book.locations.cfiFromPercentage(percent / 100);
+    if (cfi) {
+      rendition.display(cfi);
+    }
+  }
+}
+
+// Fechar livro e voltar ao upload
+async function closeBook() {
+  if (rendition) {
+    rendition.destroy();
+    rendition = null;
+  }
+  book = null;
+  if (viewer) viewer.innerHTML = '';
+  readerContainer.classList.add('hidden');
+  uploadScreen.classList.remove('hidden');
+  // Opcional: não deletar do IndexedDB para reabrir depois
+}
+
+// Inicialização automática ao carregar a página
+async function autoLoadLastBook() {
+  loadSettings();
+  loadBookmarks();
+  try {
+    const record = await loadEpubFromDB();
+    if (record && record.data) {
+      await openEpub(record.data, record.fileName || 'Livro');
+    }
+  } catch (e) {
+    // Nenhum livro salvo, permanece na tela de upload
+  }
+}
+
+// Configurar tudo
+setupEventListeners();
+autoLoadLastBook();
