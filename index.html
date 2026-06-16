@@ -1,153 +1,165 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Leitor Nativo</title>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap" rel="stylesheet">
-    
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.5/jszip.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>Leitor EPUB</title>
+  <!-- Fontes para personalização -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Literata:opsz@7..72&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,700;1,400&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-    <div id="library-view">
-        <header class="library-header">
-            <h1>Minha Biblioteca</h1>
-            <button id="btn-add-book" class="icon-btn">
-                <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            </button>
-            <input type="file" id="epub-input" accept=".epub" hidden>
-        </header>
-
-        <main class="library-grid" id="book-grid">
-            <div class="empty-state hidden" id="empty-state">
-                <p>Nenhum livro na estante.</p>
-                <span>Adicione seu primeiro EPUB sanitizado.</span>
-            </div>
-        </main>
-        
-        <div id="loading-overlay" class="hidden">
-            <div class="spinner"></div>
-            <p>Processando livro...</p>
-        </div>
+  <!-- Tela inicial de seleção de arquivo -->
+  <div id="upload-screen" class="upload-screen">
+    <div class="upload-content">
+      <div class="upload-icon">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          <polyline points="12 6 12 14"/>
+          <polyline points="8 10 12 6 16 10"/>
+        </svg>
+      </div>
+      <h2>Selecione um arquivo EPUB</h2>
+      <p>Arraste e solte ou clique para escolher</p>
+      <input type="file" id="file-input" accept=".epub">
+      <button id="file-select-btn" class="primary-btn">Escolher arquivo</button>
     </div>
+  </div>
 
-    <div id="reader-view" class="hidden">
-        <div id="viewer"></div>
+  <!-- Leitor principal (oculto inicialmente) -->
+  <div id="reader-container" class="reader-container hidden">
+    <!-- Barra superior -->
+    <header id="top-bar" class="top-bar">
+      <button id="close-btn" class="icon-btn" aria-label="Fechar livro">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <span id="book-title" class="book-title">Carregando...</span>
+      <button id="menu-btn" class="icon-btn" aria-label="Menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="1.5"/>
+          <circle cx="12" cy="12" r="1.5"/>
+          <circle cx="12" cy="19" r="1.5"/>
+        </svg>
+      </button>
+    </header>
 
-        <div id="ui-layer" class="hidden">
-            <div id="top-bar">
-                <div class="left-actions">
-                    <button id="btn-close-reader">✕</button>
-                </div>
-                <div class="right-actions">
-                    <button>🔍</button>
-                    <button>📄</button>
-                    <button id="btn-config">Aa</button>
-                    <button id="btn-bookmark">🔖</button>
-                    <button>❔</button>
-                </div>
-            </div>
+    <!-- Área de leitura -->
+    <div id="viewer" class="viewer"></div>
 
-            <div id="config-modal" class="hidden">
-                <div class="modal-tabs">
-                    <button class="tab-btn active" data-target="tab-texto">Texto</button>
-                    <button class="tab-btn" data-target="tab-iluminacao">Iluminação</button>
-                </div>
-                
-                <div class="modal-content">
-                    <div id="tab-texto" class="tab-pane active">
-                        <div class="font-selector">
-                            <div class="font-item active" data-font="Original">
-                                <div class="font-circle" style="font-family: inherit;">A</div>
-                                <span>Original</span>
-                            </div>
-                            <div class="font-item" data-font="Helvetica">
-                                <div class="font-circle" style="font-family: Helvetica, sans-serif;">A</div>
-                                <span>Helvetica</span>
-                            </div>
-                            <div class="font-item" data-font="Verdana">
-                                <div class="font-circle" style="font-family: Verdana, sans-serif;">A</div>
-                                <span>Verdana</span>
-                            </div>
-                            <div class="font-item" data-font="Literata">
-                                <div class="font-circle" style="font-family: 'Literata', serif;">A</div>
-                                <span>Literata</span>
-                            </div>
-                            <div class="font-item" data-font="Georgia">
-                                <div class="font-circle" style="font-family: Georgia, serif;">A</div>
-                                <span>Georgia</span>
-                            </div>
-                        </div>
-                        
-                        <div class="controls-grid">
-                            <div class="control-group">
-                                <span class="control-label">Tamanho</span>
-                                <div class="control-actions">
-                                    <button class="control-btn" id="btn-size-down">T-</button>
-                                    <span class="value-display" id="size-display">100%</span>
-                                    <button class="control-btn" id="btn-size-up">T+</button>
-                                </div>
-                            </div>
-                            <div class="control-group">
-                                <span class="control-label">Linhas</span>
-                                <div class="control-actions">
-                                    <button class="control-btn" id="btn-line-down">↕-</button>
-                                    <span class="value-display" id="line-display">120%</span>
-                                    <button class="control-btn" id="btn-line-up">↕+</button>
-                                </div>
-                            </div>
-                            <div class="control-group">
-                                <span class="control-label">Margens</span>
-                                <div class="control-actions">
-                                    <button class="control-btn" id="btn-margin-down">↔-</button>
-                                    <span class="value-display" id="margin-display">5%</span>
-                                    <button class="control-btn" id="btn-margin-up">↔+</button>
-                                </div>
-                            </div>
-                            <div class="control-group">
-                                <span class="control-label">Palavras</span>
-                                <div class="control-actions">
-                                    <button class="control-btn" id="btn-word-down">A A-</button>
-                                    <span class="value-display" id="word-display">0px</span>
-                                    <button class="control-btn" id="btn-word-up">A A+</button>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="alignment-row"><span>≡ Justificado</span></div>
-                    </div>
+    <!-- Barra inferior -->
+    <footer id="bottom-bar" class="bottom-bar">
+      <div class="progress-slider-container">
+        <span id="progress-label" class="progress-label">0%</span>
+        <input type="range" id="progress-slider" min="0" max="100" value="0" step="0.1" title="Progresso">
+        <span id="page-info" class="page-info">Pág. 0/0</span>
+      </div>
+      <button id="bookmark-toggle-btn" class="icon-btn bookmark-btn" aria-label="Marcador">
+        <svg id="bookmark-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2196F3" stroke-width="2">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+        </svg>
+      </button>
+    </footer>
+  </div>
 
-                    <div id="tab-iluminacao" class="tab-pane hidden">
-                        <div class="brightness-row">
-                            <span>🔅</span><input type="range" min="0" max="100" value="50" class="slider" disabled><span>🔆</span>
-                        </div>
-                        <div class="theme-selector">
-                            <button class="theme-box" data-theme="light" style="background: #ffffff; border: 1px solid #ddd; color: #1a73e8;"></button>
-                            <button class="theme-box" data-theme="dark" style="background: #000000; border: 1px solid #333; color: #1a73e8;"></button>
-                            <button class="theme-box active-theme" data-theme="sepia" style="background: #fbf6e8; border: 1px solid #ddd; color: #1a73e8;">✓</button>
-                        </div>
-                        <div class="system-theme-row">
-                            <span>Combinar com o sistema</span>
-                            <label class="switch"><input type="checkbox" id="system-theme-toggle"><span class="slider-round"></span></label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="bottom-bar">
-                <button id="btn-toc-bottom">≡</button>
-                <input type="range" id="progress-slider" min="0" max="100" value="0">
-                <span id="page-count">... / ...</span>
-            </div>
+  <!-- Painel de configurações (modal/bottom sheet) -->
+  <div id="settings-panel" class="settings-panel hidden">
+    <div class="settings-backdrop"></div>
+    <div class="settings-content">
+      <div class="settings-header">
+        <h3>Configurações</h3>
+        <button id="close-settings" class="icon-btn" aria-label="Fechar">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <!-- Abas -->
+      <div class="settings-tabs" role="tablist">
+        <button class="tab active" data-tab="themes">Temas</button>
+        <button class="tab" data-tab="text">Texto</button>
+        <button class="tab" data-tab="chapters">Capítulos</button>
+        <button class="tab" data-tab="bookmarks">Marcadores</button>
+      </div>
+      <!-- Conteúdo das abas -->
+      <div class="tab-content active" id="tab-themes">
+        <div class="theme-options">
+          <button class="theme-card" data-theme="clear">
+            <div class="theme-preview" style="background:#fff; color:#000;">Claro</div>
+            <span>Claro</span>
+          </button>
+          <button class="theme-card" data-theme="dark">
+            <div class="theme-preview" style="background:#121212; color:#e0e0e0;">Escuro</div>
+            <span>Escuro</span>
+          </button>
+          <button class="theme-card" data-theme="sepia">
+            <div class="theme-preview" style="background:#f4ecd8; color:#3e3a37;">Sépia</div>
+            <span>Sépia</span>
+          </button>
         </div>
+      </div>
+      <div class="tab-content" id="tab-text">
+        <div class="setting-group">
+          <label>Fonte</label>
+          <select id="font-family-select">
+            <option value="Literata">Literata</option>
+            <option value="Merriweather">Merriweather</option>
+            <option value="Lora">Lora</option>
+            <option value="Roboto">Roboto</option>
+            <option value="serif">Serif (padrão)</option>
+          </select>
+        </div>
+        <div class="setting-group">
+          <label>Tamanho: <span id="font-size-value">100%</span></label>
+          <input type="range" id="font-size-slider" min="80" max="200" value="100" step="1">
+        </div>
+        <div class="setting-group">
+          <label>Espaçamento entre linhas: <span id="line-height-value">1.5</span></label>
+          <input type="range" id="line-height-slider" min="1" max="2.5" value="1.5" step="0.05">
+        </div>
+        <div class="setting-group">
+          <label>Espaçamento entre palavras: <span id="word-spacing-value">0px</span></label>
+          <input type="range" id="word-spacing-slider" min="0" max="10" value="0" step="0.5">
+        </div>
+        <div class="setting-group">
+          <label>Margens laterais: <span id="margin-value">5%</span></label>
+          <input type="range" id="margin-slider" min="0" max="20" value="5" step="1">
+        </div>
+        <div class="setting-group">
+          <label>Justificação</label>
+          <select id="justify-select">
+            <option value="justify">Justificado</option>
+            <option value="left">Esquerda</option>
+          </select>
+        </div>
+        <div class="setting-group mobile-respiro">
+          <label>Respiro superior (mobile): <span id="top-padding-value">0px</span></label>
+          <input type="range" id="top-padding-slider" min="0" max="80" value="0" step="1">
+        </div>
+        <div class="setting-group mobile-respiro">
+          <label>Respiro inferior (mobile): <span id="bottom-padding-value">0px</span></label>
+          <input type="range" id="bottom-padding-slider" min="0" max="80" value="0" step="1">
+        </div>
+      </div>
+      <div class="tab-content" id="tab-chapters">
+        <ul id="toc-list" class="toc-list"></ul>
+      </div>
+      <div class="tab-content" id="tab-bookmarks">
+        <button id="add-manual-bookmark" class="secondary-btn">Salvar posição atual</button>
+        <ul id="bookmark-list" class="bookmark-list"></ul>
+      </div>
     </div>
+  </div>
 
-    <script src="app.js"></script>
+  <!-- EPUB.js CDN -->
+  <script src="https://unpkg.com/epubjs@0.3.93/dist/epub.min.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
