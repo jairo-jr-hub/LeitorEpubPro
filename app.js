@@ -2,9 +2,10 @@ const dbName = 'EpubNativeDB';
 const storeName = 'library';
 let db;
 
+// Subi a versão para 4 para garantir que o navegador limpe qualquer cache antigo dos seus testes
 function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(dbName, 3); // Versão 3 para limpar caches
+        const request = indexedDB.open(dbName, 4); 
         request.onupgradeneeded = (e) => {
             const database = e.target.result;
             if (!database.objectStoreNames.contains(storeName)) {
@@ -201,7 +202,7 @@ async function openReader(bookId) {
         spread: "none", manager: "continuous", flow: "paginated"
     });
 
-    // Registra os Temas com prioridade máxima (!important) para não bugar o fundo
+    // Registra os Temas com prioridade máxima (!important)
     rendition.themes.register("light", { "body": { "background": "#ffffff !important", "color": "#000000 !important" }});
     rendition.themes.register("sepia", { "body": { "background": "#fbf6e8 !important", "color": "#2c2b29 !important" }});
     rendition.themes.register("dark", { "body": { "background": "#000000 !important", "color": "#e0e0e0 !important" }});
@@ -232,30 +233,54 @@ async function openReader(bookId) {
         if (locationsGenerated) updateProgress();
     });
 
-    // LÓGICA DO CLIQUE INTELIGENTE NA TELA
-    function handleScreenInteraction(clientX) {
-        const iframeWidth = rendition.manager.container.clientWidth;
-        if (clientX < iframeWidth * 0.25) { // Clique nos 25% da esquerda
+    // ==========================================
+    // NOVA LÓGICA DE NAVEGAÇÃO E CLIQUES
+    // ==========================================
+    function handleScreenInteraction(e) {
+        // Se a interface estiver aberta, um clique na tela APENAS fecha a interface.
+        if (isUiVisible) {
+            isUiVisible = false;
+            dom.uiLayer.classList.add('hidden');
+            dom.configModal.classList.add('hidden');
+            return;
+        }
+
+        const screenWidth = window.innerWidth;
+        // Pega a coordenada X do clique (suporta mouse e touch do celular)
+        const clientX = e.type.includes('touch') ? e.changedTouches[0].clientX : e.clientX;
+
+        if (clientX === undefined) return;
+
+        // 30% da esquerda (Volta), 30% da direita (Avança), Centro (Menu)
+        if (clientX < screenWidth * 0.3) {
             rendition.prev();
-        } else if (clientX > iframeWidth * 0.75) { // Clique nos 25% da direita
+        } else if (clientX > screenWidth * 0.7) {
             rendition.next();
-        } else { // Clique no meio
-            isUiVisible = !isUiVisible;
-            dom.uiLayer.classList.toggle('hidden', !isUiVisible);
-            if (!isUiVisible) dom.configModal.classList.add('hidden');
+        } else {
+            isUiVisible = true;
+            dom.uiLayer.classList.remove('hidden');
         }
     }
 
+    // Usamos apenas o evento 'click' nativo para evitar disparo duplo em celulares
     rendition.on("click", (e) => {
-        const clientX = e.clientX;
-        if (clientX !== undefined) handleScreenInteraction(clientX);
+        handleScreenInteraction(e);
     });
 
-    rendition.on("touchstart", (e) => {
-        const clientX = e.changedTouches[0].clientX;
-        handleScreenInteraction(clientX);
+    // Adiciona suporte às setas do teclado dentro do iframe (para testes no PC)
+    rendition.on("keyup", (e) => {
+        if (e.key === "ArrowLeft") rendition.prev();
+        if (e.key === "ArrowRight") rendition.next();
     });
 }
+
+// Adiciona suporte às setas do teclado na tela principal
+document.addEventListener("keyup", (e) => {
+    if (!dom.readerView.classList.contains('hidden') && rendition) {
+        if (e.key === "ArrowLeft") rendition.prev();
+        if (e.key === "ArrowRight") rendition.next();
+    }
+});
 
 dom.btnCloseReader.addEventListener('click', () => {
     dom.readerView.classList.add('hidden');
@@ -313,7 +338,7 @@ dom.themeBoxes.forEach(box => {
     });
 });
 
-// Ações de Preferência (Tamanho, Linhas, Margens e Palavras)
+// Controles da UI (Tamanho, Linhas, Margens e Palavras)
 dom.btnSizeUp.addEventListener('click', () => { state.size = Math.min(300, state.size + 10); saveAndApply(); });
 dom.btnSizeDown.addEventListener('click', () => { state.size = Math.max(50, state.size - 10); saveAndApply(); });
 
@@ -352,26 +377,22 @@ function applyPreferences() {
 
     rendition.themes.select(state.theme);
     
-    // Atualização da UI (Cores do Painel)
     if (state.theme === 'dark') updateThemeVars('#000000', '#e0e0e0', '#1c1c1e', '#ffffff', '#333333', '#2c2c2e');
     else if (state.theme === 'sepia') updateThemeVars('#fbf6e8', '#2c2b29', '#ffffff', '#333333', '#e0e0e0', '#f5f5f5');
     else updateThemeVars('#ffffff', '#000000', '#f5f5f5', '#000000', '#cccccc', '#e9e9e9');
 
-    // Aplicações Estruturais via CSS Override no Epub.js
     rendition.themes.fontSize(`${state.size}%`);
     rendition.themes.override('line-height', `${state.lineHeight}%`);
     rendition.themes.override('padding-left', `${state.margin}%`);
     rendition.themes.override('padding-right', `${state.margin}%`);
     rendition.themes.override('word-spacing', `${state.wordSpacing}px`);
-    rendition.themes.override('text-align', 'justify');
     
-    // Controle de Fontes
     if (state.font === 'Original') {
-        rendition.themes.font(''); // Cai pra fonte oficial do celular
+        rendition.themes.font(''); 
     } else if (state.font === 'Literata' || state.font === 'Georgia') {
-        rendition.themes.font(`'${state.font}', serif`); // Força serifada
+        rendition.themes.font(`'${state.font}', serif`); 
     } else {
-        rendition.themes.font(`'${state.font}', sans-serif`); // Força sem serifa
+        rendition.themes.font(`'${state.font}', sans-serif`); 
     }
     
     if (locationsGenerated) {
