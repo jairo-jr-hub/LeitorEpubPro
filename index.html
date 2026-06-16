@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Leitor Nativo</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.5/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+</head>
+<body>
+
+    <div id="library-view">
+        <header class="library-header">
+            <h1>Minha Biblioteca</h1>
+            <button id="btn-add-book" class="icon-btn">
+                <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <input type="file" id="epub-input" accept=".epub" hidden>
+        </header>
+
+        <main class="library-grid" id="book-grid">
+            <div class="empty-state hidden" id="empty-state">
+                <p>Nenhum livro na estante.</p>
+                <span>Adicione seu primeiro EPUB sanitizado.</span>
+            </div>
+        </main>
+        
+        <div id="loading-overlay" class="hidden">
+            <div class="spinner"></div>
+            <p>Processando livro...</p>
+        </div>
+    </div>
+
+    <div id="reader-view" class="hidden">
+        <div id="viewer"></div>
+
+        <div id="ui-layer" class="hidden">
+            <div id="top-bar">
+                <div class="left-actions">
+                    <button id="btn-close-reader">✕</button>
+                </div>
+                <div class="right-actions">
+                    <button>🔍</button>
+                    <button>📄</button>
+                    <button id="btn-config">Aa</button>
+                    <button id="btn-bookmark">🔖</button>
+                    <button>❔</button>
+                </div>
+            </div>
+
+            <div id="config-modal" class="hidden">
+                <div class="modal-tabs">
+                    <button class="tab-btn active" data-target="tab-texto">Texto</button>
+                    <button class="tab-btn" data-target="tab-iluminacao">Iluminação</button>
+                </div>
+                
+                <div class="modal-content">
+                    <div id="tab-texto" class="tab-pane active">
+                        <div class="font-selector">
+                            <div class="font-item active" data-font="Original">
+                                <div class="font-circle" style="font-family: inherit;">A</div>
+                                <span>Original</span>
+                            </div>
+                            <div class="font-item" data-font="Helvetica">
+                                <div class="font-circle" style="font-family: Helvetica, sans-serif;">A</div>
+                                <span>Helvetica</span>
+                            </div>
+                            <div class="font-item" data-font="Verdana">
+                                <div class="font-circle" style="font-family: Verdana, sans-serif;">A</div>
+                                <span>Verdana</span>
+                            </div>
+                            <div class="font-item" data-font="Literata">
+                                <div class="font-circle" style="font-family: 'Literata', serif;">A</div>
+                                <span>Literata</span>
+                            </div>
+                            <div class="font-item" data-font="Georgia">
+                                <div class="font-circle" style="font-family: Georgia, serif;">A</div>
+                                <span>Georgia</span>
+                            </div>
+                        </div>
+                        
+                        <div class="controls-grid">
+                            <div class="control-group">
+                                <span class="control-label">Tamanho</span>
+                                <div class="control-actions">
+                                    <button class="control-btn" id="btn-size-down">T-</button>
+                                    <span class="value-display" id="size-display">100%</span>
+                                    <button class="control-btn" id="btn-size-up">T+</button>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <span class="control-label">Linhas</span>
+                                <div class="control-actions">
+                                    <button class="control-btn" id="btn-line-down">↕-</button>
+                                    <span class="value-display" id="line-display">120%</span>
+                                    <button class="control-btn" id="btn-line-up">↕+</button>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <span class="control-label">Margens</span>
+                                <div class="control-actions">
+                                    <button class="control-btn" id="btn-margin-down">↔-</button>
+                                    <span class="value-display" id="margin-display">5%</span>
+                                    <button class="control-btn" id="btn-margin-up">↔+</button>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <span class="control-label">Palavras</span>
+                                <div class="control-actions">
+                                    <button class="control-btn" id="btn-word-down">A A-</button>
+                                    <span class="value-display" id="word-display">0px</span>
+                                    <button class="control-btn" id="btn-word-up">A A+</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alignment-row"><span>≡ Justificado</span></div>
+                    </div>
+
+                    <div id="tab-iluminacao" class="tab-pane hidden">
+                        <div class="brightness-row">
+                            <span>🔅</span><input type="range" min="0" max="100" value="50" class="slider" disabled><span>🔆</span>
+                        </div>
+                        <div class="theme-selector">
+                            <button class="theme-box" data-theme="light" style="background: #ffffff; border: 1px solid #ddd; color: #1a73e8;"></button>
+                            <button class="theme-box" data-theme="dark" style="background: #000000; border: 1px solid #333; color: #1a73e8;"></button>
+                            <button class="theme-box active-theme" data-theme="sepia" style="background: #fbf6e8; border: 1px solid #ddd; color: #1a73e8;">✓</button>
+                        </div>
+                        <div class="system-theme-row">
+                            <span>Combinar com o sistema</span>
+                            <label class="switch"><input type="checkbox" id="system-theme-toggle"><span class="slider-round"></span></label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="bottom-bar">
+                <button id="btn-toc-bottom">≡</button>
+                <input type="range" id="progress-slider" min="0" max="100" value="0">
+                <span id="page-count">... / ...</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
